@@ -15,6 +15,7 @@ import 'package:soliplex_frontend/core/providers/config_provider.dart';
 /// On web, uses backend baseUrl for BFF endpoints.
 final authFlowProvider = Provider<AuthFlow>((ref) {
   final config = ref.watch(configProvider);
+  debugPrint('authFlowProvider: baseUrl=${config.baseUrl}');
   return createAuthFlow(backendBaseUrl: config.baseUrl);
 });
 

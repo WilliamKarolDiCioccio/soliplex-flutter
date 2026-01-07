@@ -15,43 +15,26 @@ import 'package:soliplex_frontend/core/auth/oidc_issuer.dart';
 /// Implements [TokenRefresher] to provide refresh capabilities to
 /// RefreshingHttpClient without tight coupling.
 ///
-/// ## Dependency Injection Pattern
+/// ## Dependency Injection
 ///
-/// Dependencies use `late final` fields initialized at the start of [build]:
-///
-/// ```dart
-/// late final AuthStorage _storage;
-/// late final TokenRefreshService _refreshService;
-///
-/// @override
-/// AuthState build() {
-///   _storage = ref.read(authStorageProvider);
-///   _refreshService = ref.read(tokenRefreshServiceProvider);
-///   // ...
-/// }
-/// ```
-///
-/// **Why not constructor injection?** Riverpod's [NotifierProvider] uses
-/// `AuthNotifier.new` (the default constructor), so parameters can't be passed.
-/// The `ref` object is only available inside [build] and instance methods.
-///
-/// **Lifecycle guarantee:** Riverpod calls [build] before exposing the
-/// Notifier. No instance method can be called until [build] completes and
-/// returns the initial state. The `late final` fields are always initialized
-/// before use.
+/// - [_storage] and [_refreshService]: `late final` fields initialized once
+///   in [build] - these don't change based on config.
+/// - [_authFlow]: Getter that reads fresh from provider each time - picks up
+///   URL changes when user switches backends.
 ///
 /// **Testing:** Override [authStorageProvider] and
 /// [tokenRefreshServiceProvider] in tests to inject mocks.
 class AuthNotifier extends Notifier<AuthState> implements TokenRefresher {
-  late final AuthFlow _authFlow;
   late final AuthStorage _storage;
   late final TokenRefreshService _refreshService;
+
+  /// Get the current auth flow (picks up latest config URL).
+  AuthFlow get _authFlow => ref.read(authFlowProvider);
 
   void _log(String message) => debugPrint('AuthNotifier: $message');
 
   @override
   AuthState build() {
-    _authFlow = ref.read(authFlowProvider);
     _storage = ref.read(authStorageProvider);
     _refreshService = ref.read(tokenRefreshServiceProvider);
 
