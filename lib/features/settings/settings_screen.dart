@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:soliplex_frontend/core/auth/auth_provider.dart';
 import 'package:soliplex_frontend/core/auth/auth_state.dart';
 import 'package:soliplex_frontend/core/providers/config_provider.dart';
+import 'package:soliplex_frontend/shared/widgets/platform_adaptive_dialog.dart';
 
 /// Settings screen for app configuration.
 ///
@@ -19,49 +20,47 @@ class SettingsScreen extends ConsumerWidget {
     final controller = TextEditingController(text: currentUrl);
     final formKey = GlobalKey<FormState>();
 
-    final newUrl = await showDialog<String>(
+    final newUrl = await showPlatformAdaptiveDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Backend URL'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'URL',
-              hintText: 'http://localhost:8000',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.url,
-            autofocus: true,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter a URL';
-              }
-              final trimmed = value.trim();
-              if (!trimmed.startsWith('http://') &&
-                  !trimmed.startsWith('https://')) {
-                return 'URL must start with http:// or https://';
-              }
-              return null;
-            },
+      title: const Text('Backend URL'),
+      content: Form(
+        key: formKey,
+        child: TextFormField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'URL',
+            hintText: 'http://localhost:8000',
+            border: OutlineInputBorder(),
           ),
+          keyboardType: TextInputType.url,
+          autofocus: true,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter a URL';
+            }
+            final trimmed = value.trim();
+            if (!trimmed.startsWith('http://') &&
+                !trimmed.startsWith('https://')) {
+              return 'URL must start with http:// or https://';
+            }
+            return null;
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.of(context).pop(controller.text.trim());
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
+      actions: [
+        const AdaptiveDialogAction<String>(
+          child: Text('Cancel'),
+        ),
+        AdaptiveDialogAction<String>(
+          child: const Text('Save'),
+          isDefault: true,
+          onPressed: () {
+            if (formKey.currentState!.validate()) {
+              Navigator.of(context).pop(controller.text.trim());
+            }
+          },
+        ),
+      ],
     );
 
     controller.dispose();
