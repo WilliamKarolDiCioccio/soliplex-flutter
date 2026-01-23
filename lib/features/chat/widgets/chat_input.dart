@@ -6,13 +6,38 @@ import 'package:soliplex_frontend/core/providers/active_run_provider.dart';
 import 'package:soliplex_frontend/core/providers/documents_provider.dart';
 import 'package:soliplex_frontend/design/tokens/spacing.dart';
 
+/// Formats a document path/title to show filename with up to 2 parent folders.
+///
+/// Examples:
+/// - "file:///path/to/my/favorite/document.txt" -> "my/favorite/document.txt"
+/// - "/path/to/file.pdf" -> "to/file.pdf"
+/// - "document.txt" -> "document.txt"
+String formatDocumentTitle(String title) {
+  // Remove file:// prefix if present
+  var path = title;
+  if (path.startsWith('file://')) {
+    path = path.substring(7);
+  }
+
+  // Split by path separator
+  final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+
+  if (segments.isEmpty) return title;
+
+  // Take the last 3 segments (filename + up to 2 parent folders)
+  final displaySegments =
+      segments.length <= 3 ? segments : segments.sublist(segments.length - 3);
+
+  return displaySegments.join('/');
+}
+
 /// Widget for chat message input.
 ///
 /// Provides:
 /// - Text field for typing messages
 /// - Send button (enabled/disabled based on canSendMessageProvider)
 /// - Document picker button (📎) for narrowing RAG searches
-/// - Selected document display above input
+/// - Selected documents display above input
 /// - Keyboard shortcuts: Enter to send, Shift+Enter for new line
 /// - Auto-clear input after send
 ///
@@ -23,9 +48,9 @@ import 'package:soliplex_frontend/design/tokens/spacing.dart';
 ///     // Handle sending message
 ///   },
 ///   roomId: 'room-123',
-///   selectedDocument: document,
-///   onDocumentSelected: (doc) {
-///     // Handle document selection
+///   selectedDocuments: {document1, document2},
+///   onDocumentsChanged: (docs) {
+///     // Handle documents change
 ///   },
 /// )
 /// ```
@@ -34,8 +59,8 @@ class ChatInput extends ConsumerStatefulWidget {
   const ChatInput({
     required this.onSend,
     this.roomId,
-    this.selectedDocument,
-    this.onDocumentSelected,
+    this.selectedDocuments = const {},
+    this.onDocumentsChanged,
     super.key,
   });
 
@@ -45,11 +70,11 @@ class ChatInput extends ConsumerStatefulWidget {
   /// The current room ID for fetching documents.
   final String? roomId;
 
-  /// The currently selected document for RAG filtering.
-  final RagDocument? selectedDocument;
+  /// The currently selected documents for RAG filtering.
+  final Set<RagDocument> selectedDocuments;
 
   /// Callback invoked when document selection changes.
-  final void Function(RagDocument?)? onDocumentSelected;
+  final void Function(Set<RagDocument>)? onDocumentsChanged;
 
   @override
   ConsumerState<ChatInput> createState() => _ChatInputState();
@@ -101,18 +126,22 @@ class _ChatInputState extends ConsumerState<ChatInput> {
     final roomId = widget.roomId;
     if (roomId == null) return;
 
-    final result = await showDialog<RagDocument>(
+    final result = await showDialog<Set<RagDocument>>(
       context: context,
-      builder: (context) => _DocumentPickerDialog(roomId: roomId),
+      builder: (context) => _DocumentPickerDialog(
+        roomId: roomId,
+        initialSelection: widget.selectedDocuments,
+      ),
     );
 
     if (result != null) {
-      widget.onDocumentSelected?.call(result);
+      widget.onDocumentsChanged?.call(result);
     }
   }
 
-  void _clearSelectedDocument() {
-    widget.onDocumentSelected?.call(null);
+  void _removeDocument(RagDocument doc) {
+    final newSet = Set<RagDocument>.from(widget.selectedDocuments)..remove(doc);
+    widget.onDocumentsChanged?.call(newSet);
   }
 
   @override
@@ -120,7 +149,7 @@ class _ChatInputState extends ConsumerState<ChatInput> {
     final canSend = ref.watch(canSendMessageProvider);
     final runState = ref.watch(activeRunNotifierProvider);
     final hasRoom = widget.roomId != null;
-    final selectedDoc = widget.selectedDocument;
+    final selectedDocs = widget.selectedDocuments;
 
     return Container(
       padding: const EdgeInsets.all(SoliplexSpacing.s4),
@@ -128,37 +157,46 @@ class _ChatInputState extends ConsumerState<ChatInput> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Selected document display
-          if (selectedDoc != null)
+          // Selected documents display
+          if (selectedDocs.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: SoliplexSpacing.s2),
-              child: Row(
+              child: Wrap(
+                spacing: SoliplexSpacing.s2,
+                runSpacing: SoliplexSpacing.s1,
                 children: [
-                  Icon(
-                    Icons.description,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: SoliplexSpacing.s1),
-                  Expanded(
-                    child: Text(
-                      selectedDoc.title,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
+                  for (final doc in selectedDocs)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.description,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: SoliplexSpacing.s1),
+                        Text(
+                          formatDocumentTitle(doc.title),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        IconButton(
+                          onPressed: () => _removeDocument(doc),
+                          icon: const Icon(Icons.close, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 24,
+                            minHeight: 24,
                           ),
-                      overflow: TextOverflow.ellipsis,
+                          tooltip: 'Remove document filter',
+                        ),
+                      ],
                     ),
-                  ),
-                  IconButton(
-                    onPressed: _clearSelectedDocument,
-                    icon: const Icon(Icons.close, size: 16),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 24,
-                      minHeight: 24,
-                    ),
-                    tooltip: 'Remove document filter',
-                  ),
                 ],
               ),
             ),
@@ -174,9 +212,7 @@ class _ChatInputState extends ConsumerState<ChatInput> {
                   onPressed: canSend ? _showDocumentPicker : null,
                   icon: const Icon(Icons.attach_file),
                 ),
-
               const SizedBox(width: 8),
-
               // Text field
               Expanded(
                 child: CallbackShortcuts(
@@ -245,18 +281,46 @@ class _ChatInputState extends ConsumerState<ChatInput> {
   }
 }
 
-/// Dialog for selecting a document from the room's document list.
-class _DocumentPickerDialog extends ConsumerWidget {
-  const _DocumentPickerDialog({required this.roomId});
+/// Dialog for selecting documents from the room's document list.
+class _DocumentPickerDialog extends ConsumerStatefulWidget {
+  const _DocumentPickerDialog({
+    required this.roomId,
+    required this.initialSelection,
+  });
 
   final String roomId;
+  final Set<RagDocument> initialSelection;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final documentsAsync = ref.watch(documentsProvider(roomId));
+  ConsumerState<_DocumentPickerDialog> createState() =>
+      _DocumentPickerDialogState();
+}
+
+class _DocumentPickerDialogState extends ConsumerState<_DocumentPickerDialog> {
+  late Set<RagDocument> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set.from(widget.initialSelection);
+  }
+
+  void _toggleDocument(RagDocument doc) {
+    setState(() {
+      if (_selected.contains(doc)) {
+        _selected.remove(doc);
+      } else {
+        _selected.add(doc);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final documentsAsync = ref.watch(documentsProvider(widget.roomId));
 
     return AlertDialog(
-      title: const Text('Select a document'),
+      title: const Text('Select documents'),
       content: SizedBox(
         width: 300,
         height: 400,
@@ -269,9 +333,11 @@ class _DocumentPickerDialog extends ConsumerWidget {
               itemCount: documents.length,
               itemBuilder: (context, index) {
                 final doc = documents[index];
-                return ListTile(
-                  title: Text(doc.title),
-                  onTap: () => Navigator.of(context).pop(doc),
+                final isSelected = _selected.contains(doc);
+                return CheckboxListTile(
+                  title: Text(formatDocumentTitle(doc.title)),
+                  value: isSelected,
+                  onChanged: (_) => _toggleDocument(doc),
                 );
               },
             );
@@ -284,6 +350,10 @@ class _DocumentPickerDialog extends ConsumerWidget {
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_selected),
+          child: const Text('Done'),
         ),
       ],
     );
